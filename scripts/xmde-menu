@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+#   Launch a general menu for the XMonad Window Manager.
+#   Only apply specific options to the dmenu program. These options can be
+#   found in a configuration file, sourced by a higher level menu script, like
+#   xmde-appmenu.
+#
+
+set -e
+
+dmenu -m  "${MENU_SCREEN:-0}"                                \
+      -p  "${MENU_PROMPT:->}"                                \
+      -fn "${MENU-FONT:-xft:Liberation Mono:pixelsize=16}"   \
+      -f                                                     \
+      -nb "${MENU_NORMAL_BG:-#101010}"                       \
+      -nf "${MENU_NORMAL_FG:-#888888}"                       \
+      -sb "${MENU_SELECT_BG:-#101010}"                       \
+      -sf "${MENU_SELECT_FG:-#cccccc}"

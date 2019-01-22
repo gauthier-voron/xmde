@@ -1,0 +1,60 @@
+#!/bin/sh
+#
+#   Launch script for XMonad Desktop Environment.
+#   Collect either user specific configuration or system wide default
+#   configuration and then launch the XMonad window manager.
+#
+
+# First step: collect the Xresources configuration.
+# Stop at the first possible path for 'Xresources' sot that the user can
+# override system wide configuration.
+#
+for xres in "$HOME/.config/xmde/Xresources" \
+	    "$HOME/.Xresources"             \
+	    "/etc/xmde/Xresources"
+do
+
+    if [ -f "$xres" ] ; then
+	xrdb -merge "$xres"
+	break
+    fi
+
+done
+
+# Second step: execute specific scripts.
+# Xmde launches this script when it starts (but not when it restarts). Once
+# again, the execution stops at the first existing directory. All the scripts
+# of this directory are executed.
+#
+for xinitd in "$HOME/.config/xmde/xinitrc.d" \
+	      "$HOME/.xinitrc.d"             \
+	      "/etc/xmde/xinitrc.d"
+do
+
+    if [ -d "$xinitd" ] ; then
+	for script in "$xinitd/"* ; do
+	    if [ -f "$script" -a -x "$script" ] ; then
+		. "$script"
+	    fi
+	done
+
+	break
+    fi
+
+done
+
+# Third step: save some vconsole properties in a /var/run file.
+# These values are used by xmde-lock for cosmetic purpose.
+#
+if [ ! -d "/var/run/user/$UID/xmde" ] ; then
+    mkdir "/var/run/user/$UID/xmde"
+fi
+echo "VCONSOLE_COLUMNS=$(tput cols)" > "/var/run/user/$UID/xmde/vconsole"
+echo "VCONSOLE_LINES=$(tput lines)" >> "/var/run/user/$UID/xmde/vconsole"
+
+
+# Fourth step: launch xmonad with xmde-start
+# This script ensures that xmonad has been recompiled since last update either
+# of the xmonad libraries or of the user xmonad configuration file.
+#
+exec xmde-start

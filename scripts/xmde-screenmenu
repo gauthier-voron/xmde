@@ -1,0 +1,87 @@
+#!/bin/sh
+#
+#   Launch the XMonad Window Manager screen menu.
+#   Ask for the user to type a screen configuration then launch it.
+#   If invoked with the 'switch' operand, then choose the next screen
+#   configuration in round-robin.
+#
+
+set -e
+
+
+if [ "x$1" = 'x' ] ; then
+
+    # List all the possible screen configurations with xmde-screen and ask the
+    # user to choose one.
+    #
+    config=$(xmde-screen list | xmde-menu)
+
+    # Enable the chosen configuration with xmde-screen, then exit.
+    #
+    exec xmde-screen set "$config"
+
+elif [ "$1" = 'switch' ] ; then
+
+    # Find the last screen configuration used.
+    # If cannot find the last configuration, then assume it is 'mono' as this
+    # configuration is always available.
+    #
+    if [ -e "/var/run/user/$UID/xmde/screen" ] ; then
+	lastconf=$(cat "/var/run/user/$UID/xmde/screen")
+    else
+	lastconf='mono'
+    fi
+
+    # Iterate over all the possible screen configurations and take the one
+    # following the current configuration.
+    #
+    takenext=0
+    firstconf=
+    for config in $(xmde-screen list) ; do
+	# Retain the first configuration to loop over if the current
+	# configuration is the last one.
+	#
+	if [ "x$firstconf" = 'x' ] ; then
+	    firstconf="$config"
+	fi
+
+	# If the previous configuration was the current one, then take this one
+	# and exit. Put the $takenext to 0 again to not confuse with the last
+	# iteration corner case.
+	#
+	if [ $takenext -eq 1 ] ; then
+	    xmde-screen set "$config"
+	    takenext=0
+	    break
+	fi
+
+	# If this is the current configuration, remind to take the
+	# configuration on the next loop.
+	#
+	if [ "$config" = "$lastconfig" ] ; then
+	    takenext=1
+	fi
+    done
+
+    # Last iteration corner case where the current configuration is the last
+    # listed by xmde-screen.
+    #
+    if [ $takenext -eq 1 ] ; then
+	xmde-screen set "$firstconf"
+	config="$firstconf"
+    fi
+
+    # Now write the new screen configuration in the /var file so we can
+    # switch to the next one on subsequent invocation.
+    #
+    if [ ! -d "/var/run/user/$UID/xmde" ] ; then
+	mkdir "/var/run/user/$UID/xmde"
+    fi
+    echo "$config" > "/var/run/user/$UID/xmde/screen"
+    
+else
+
+    echo "Unkown operand '$1'" >&2
+    exit 1
+
+fi

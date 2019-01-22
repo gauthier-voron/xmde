@@ -1,0 +1,136 @@
+#!/usr/bin/perl -l
+
+use strict;
+use warnings;
+
+
+my $META_CODE = 64;
+my $TAB_CODE  = 23;
+
+my $META_PRESSED = 0;
+
+
+sub keyboards
+{
+    my $ret = system('which xinput > /dev/null 2> /dev/null');
+    my ($line, @ids);
+
+    if ($ret != 0) {
+	printf(STDERR "xmde-highlight: cannot find executable 'xinput'\n");
+	exit (1);
+    }
+
+    foreach $line (split("\n", `xinput list`)) {
+	if ($line =~ m|XTEST|) {
+	    next;
+	} elsif ($line =~ m|^.*keyboard.*id=(\d+).*slave\s+keyboard.*$|) {
+	    push(@ids, $1);
+	}
+    }
+
+    if (scalar(@ids) < 1) {
+	printf(STDERR "xmde-highlight: no keyboard to monitor\n");
+	exit (1);
+    }
+
+    if (scalar(@ids) > 1) {
+	printf(STDERR "xmde-highlight: too much keyboard to monitor\n");
+	exit (1);
+    }
+
+    return $ids[0];
+}
+
+
+sub update_highlight
+{
+    my @windows = split("\n", `xprop -root`);
+    my $focused = (grep { m|_NET_ACTIVE_WINDOW\(WINDOW\)| } @windows)[0];
+    my $others  = (grep { m|_LIST_STACKING\(WINDOW\)| } @windows)[0];
+    my ($id, @oids);
+    
+    $focused =~ s|^.*(0x\S+).*$|$1|;
+    $others =~ s|^.*#(.*)|$1|;
+    $others =~ s|,| |g;
+    $others =~ s|^\s*(.*?)\s*$|$1|;
+    @oids = split(/\s+/, $others);
+
+    for $id (@oids) {
+	if ($id eq $focused) {
+	    system("transset-df -i $id 1 > /dev/null");
+	} else {
+	    system("transset-df -i $id .5 > /dev/null");
+	}
+    }
+}
+
+sub stop_highlight
+{
+    my @windows = split("\n", `xprop -root`);
+    my $winds  = (grep { m|_LIST_STACKING\(WINDOW\)| } @windows)[0];
+    my ($id, @wids);
+    
+    $winds =~ s|^.*#(.*)|$1|;
+    $winds =~ s|,| |g;
+    $winds =~ s|^\s*(.*?)\s*$|$1|;
+    @wids = split(/\s+/, $winds);
+
+    for $id (@wids) {
+	system("transset-df -i $id 1 > /dev/null");
+    }
+}
+
+sub process
+{
+    my ($event) = @_;
+    my ($type, $code);
+
+    if (!($event =~ m!^key (release|press)\s+(\d+)\s*$!)) {
+	return;
+    }
+
+    ($type, $code) = ($1, $2);
+
+    if ($code == $META_CODE) {
+    	if ($type eq 'press') {
+    	    $META_PRESSED = 1;
+    	} elsif ($type eq 'release') {
+    	    $META_PRESSED = 0;
+    	    stop_highlight();
+    	}
+    } elsif ($code == $TAB_CODE) {
+    	if (($type eq 'press') && ($META_PRESSED == 1)) {
+    	    update_highlight();
+    	}
+    }
+}
+
+sub main
+{
+    my $id = keyboards();
+    my ($fd, $pid, $event);
+
+    $pid = fork();
+    if ($pid == 0) {
+	exec ('xcompmgr');
+	exit (1);
+    }
+
+    $SIG{TERM} = sub {};
+    $SIG{INT} = sub { kill('INT', $pid); exit (0); };
+
+    if (!open($fd, '-|', 'xinput', 'test', $id)) {
+    	printf(STDERR "xmde-highlight: cannot use xinput\n");
+    	exit (1);
+    }
+
+    while (defined($event = <$fd>)) {
+    	chomp($event);
+    	process($event);
+    }
+
+    return 0;
+}
+
+exit (main(@ARGV));
+__END__

@@ -1,0 +1,13 @@
+[Unit]
+Description=Launch xmde-lock when entering sleep mode
+Before=sleep.target
+
+[Service]
+User=%I
+Type=forking
+Environment=DISPLAY=:0
+ExecStart=/usr/bin/xmde-lock
+ExecStartPost=/usr/bin/sleep 1
+
+[Install]
+WantedBy=suspend.target

@@ -1,0 +1,257 @@
+#!/usr/bin/perl -l
+use strict;
+use warnings;
+use File::Temp qw(tempdir);
+
+
+# Analyze an $entry, assumed to be an image and transform it in an item (a
+# dictionnary reference with 'path', 'width', 'height', 'x' and 'y' keys)
+# with its 'x' and 'y' fields at 0.
+sub itemize
+{
+    my ($entry) = @_;
+    my ($width, $height);
+    my $command = "identify -format '%w\n%h\n' $entry 2>/dev/null";
+    my $fh;
+
+    if (!open($fh, '-|', $command)) {
+	return undef;
+    }
+
+    $width = <$fh>;
+    $height = <$fh>;
+
+    close($fh);
+
+    if (!defined($width) || !defined($height)) {
+	return undef;
+    }
+
+    chomp($width);
+    chomp($height);
+
+    return {
+	path  => $entry,
+	width => $width, height => $height,
+	x     => 0,      y      => 0
+    };
+}
+
+# Recursively collects images files and transform them in items, starting with
+# the given \@entries paths.
+# Store the results in \@items.
+sub collect
+{
+    my ($entries, $items, $quiet) = @_;
+    my ($entry, $item, $fh, @subs);
+    my $count = 0;
+
+    foreach $entry (@$entries) {
+	if (-d $entry) {
+	    if (!opendir($fh, $entry)) {
+		if (!$quiet) {
+		    printf(STDERR "%s: invalid input '%s'\n", $0, $entry);
+		}
+		next;
+	    }
+
+	    @subs = readdir($fh);
+	    
+	    close($fh);
+
+	    @subs = grep { ! /^\.\.?$/ } @subs;
+	    @subs = map { $entry . '/' . $_ } @subs;
+	    
+	    $count += collect(\@subs, $items, 1);
+
+	    next;
+	}
+
+	if (!(-f $entry ) || !(-r $entry)) {
+	    if (!$quiet) {
+		printf(STDERR "%s: invalid input '%s'\n", $0, $entry);
+	    }
+	    next;
+	}
+	
+	$item = itemize($entry);
+	
+	if (!defined($item)) {
+	    if (!$quiet) {
+		printf(STDERR "%s: invalid input '%s'\n", $0, $entry);
+	    }
+	    next;
+	}
+
+	push(@$items, $item);
+	$count++;
+    }
+
+    return $count;
+}
+
+# Collect informations about currently used screens.
+# Put each screen in \@screens in the form of items with the path
+# corresponding to the screen name.
+sub gather
+{
+    my ($screens) = @_;
+    my $command = "xrandr";
+    my ($fh, $line, $screen);
+    my $count = 0;
+
+    if (!open($fh, '-|', $command)) {
+	return undef;
+    }
+
+    foreach $line (<$fh>) {
+	if (!($line =~ /^(\S+) .* (\d+)x(\d+)\+(\d+)\+(\d+)/)) {
+	    next;
+	}
+
+	$screen = { path  => $1,
+		    width => $2, height => $3,
+		    x     => $4, y => $5
+	};
+
+	push(@$screens, $screen);
+
+	$count++;
+    }
+
+    return $count;
+}
+
+
+# Compare two items depending on how they fit a thrd item.
+# An item fit another one if their width/height ratios are similar and if their
+# size are also.
+# If two items are equals, a random choice is done.
+sub cmpitems
+{
+    my ($a, $b, $i) = @_;
+    my ($scorea, $scoreb) = (0, 0);
+    my ($ra, $rb, $ri);
+    my ($sa, $sb);
+
+    $ri = $i->{width} / $i->{height};
+    $ra = $a->{width} / $a->{height};
+    $rb = $b->{width} / $b->{height};
+
+    $sa = 0;
+    if ($i->{width} > $a->{width})  {$sa += $i->{width} /  $a->{width};       }
+    else                            {$sa += $a->{width} / ($i->{width}   * 9);}
+    if ($i->{height} > $a->{width}) {$sa += $i->{height} /  $a->{height};     }
+    else                            {$sa += $a->{height} / ($i->{height} * 9);}
+
+    $sb = 0;
+    if ($i->{width} > $b->{width})  {$sb += $i->{width} /  $b->{width};       }
+    else                            {$sb += $b->{width} / ($i->{width}   * 9);}
+    if ($i->{height} > $b->{width}) {$sb += $i->{height} /  $b->{height};     }
+    else                            {$sb += $b->{height} / ($i->{height} * 9);}
+
+    $scorea = $sa + abs($ra - $ri) * 30;
+    $scoreb = $sb + abs($rb - $ri) * 30;
+
+    if ($scorea == $scoreb) {
+	$scorea += rand();
+	$scoreb += rand();
+    }
+
+    return $scorea <=> $scoreb;
+}
+
+# Decide what item assign to what screen basing on what item fits the best a
+# screen.
+sub assign
+{
+    my ($items, $screens, $choices) = @_;
+    my ($item, $screen);
+
+    foreach $screen (@$screens) {
+	$item = (sort { cmpitems($a, $b, $screen) } @$items)[0];
+	push(@$choices, $item);
+    }
+}
+
+
+# Compute the maximum dimension of the unified screen.
+# Basically a max of x+width and y+height.
+sub dimension
+{
+    my ($list) = @_;
+    my ($width, $height) = (0, 0);
+    my ($item, $temp);
+
+    foreach $item (@$list) {
+	$temp = $item->{x} + $item->{width};
+	if ($temp > $width) {
+	    $width = $temp;
+	}
+
+	$temp = $item->{y} + $item->{height};
+	if ($temp > $height) {
+	    $height = $temp;
+	}
+    }
+
+    return {width => $width, height => $height};
+}
+
+# Compose every items in a unique image which fits the screens layout.
+# If an item does not fir perfectly to its screen, it is resized first.
+# The resulting image is set as the wallpaper.
+sub compose
+{
+    my ($screens, $items) = @_;
+    my $dim = dimension($screens);
+    my ($dir, $screen, $step, $temp);
+
+    $dir = tempdir(CLEANUP => 1);
+
+    system('convert', '-size', $dim->{width} . 'x' . $dim->{height},
+	   'xc:black', $dir . '/step0.png');
+
+    $step = 0;
+    foreach $screen (@$screens) {
+	if ($items->[$step]->{width}  != $screen->{width} ||
+	    $items->[$step]->{height} != $screen->{height}) {
+	    $temp = $dir . '/resize' . ($step + 1) . '.png';
+
+	    system('convert', $items->[$step]->{path}, '-resize',
+		   $screen->{width} . 'x' . $screen->{height} . '!',
+		   $temp);
+	} else {
+	    $temp = $items->[$step]->{path};
+	}
+	
+	system('composite', '-geometry',
+	       '+' . $screen->{x} . '+' . $screen->{y},
+	       $temp,
+	       $dir . '/step' .  $step      . '.png',
+	       $dir . '/step' . ($step + 1) . '.png');
+	$step++;
+    }
+
+    system('feh', '--no-fehbg', '--bg-fill', $dir . '/step' . $step . '.png');
+}
+
+
+sub main
+{
+    my (@entries) = @_;
+    my (@items, $item);
+    my (@screens, $screen);
+    my (@choices, $choice);
+
+    collect(\@entries, \@items, 0);
+    gather(\@screens);
+    assign(\@items, \@screens, \@choices);
+
+    compose(\@screens, \@choices);
+
+    return 0;
+}
+
+
+exit (main(@ARGV));

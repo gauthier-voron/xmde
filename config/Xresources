@@ -1,0 +1,23 @@
+Xcursor.size:                           16
+URxvt*font:                             xft:Liberation Mono:pixelsize=12:antialias=true:hinting=true
+URxvt*boldFont:                         xft:Liberation Mono:bold:pixelsize=12:antialias=true:hinting=true
+URxvt*scrollBar:                        false
+URxvt*mouseWheelScrollPage:             false
+URxvt*background:                       [100]#101010
+URxvt*foreground:                       [100]#cccccc
+URxvt*color0:                           #000000
+URxvt*color1:                           #a00000
+URxvt*color2:                           #4e9a06
+URxvt*color3:                           #c4b000
+URxvt*color4:                           #3445a4
+URxvt*color5:                           #a550ab
+URxvt*color6:                           #00aaaa
+URxvt*color7:                           #888888
+URxvt*color8:                           #555555
+URxvt*color9:                           #ef2929
+URxvt*color10:                          #4ad224
+URxvt*color11:                          #fce94f
+URxvt*color12:                          #3377ff
+URxvt*color13:                          #ed4fe8
+URxvt*color14:                          #33cfcf
+URxvt*color15:                          #eeeeee

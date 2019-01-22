@@ -1,0 +1,24 @@
+#!/bin/sh
+
+if ! which xmobar 2> /dev/null ; then
+    printf "xmde: cannot find status bar command 'xmobar'\n"
+    printf "exiting...\n"
+    exit 1
+fi >&2
+
+for xbconfig in "$HOME/.config/xmde/xmobar.conf" \
+		"$HOME/.xmobar.conf"             \
+		"/etc/xmde/xmobar.conf"
+do
+
+    if [ -f "$xbconfig" ] ; then
+	exec xmobar "$xbconfig"
+    fi
+
+done
+
+exec >&2
+printf "xmde: cannot find status bar config\n"
+printf "exiting...\n"
+
+exit 1

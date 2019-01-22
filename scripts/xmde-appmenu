@@ -1,0 +1,59 @@
+#!/bin/sh
+#
+#   Launch the XMonad Window Manager application menu.
+#   Ask for the user to type a program name and then launch it.
+#   By default, the program is launched as an exec of the menu process but this
+#   behavior can be overriden by the configuration file.
+#
+
+set -e
+
+
+# If there is an argument, this is the configuration file.
+# Source it blindly, this program should not be executed with privileges
+# anyway.
+#
+if [ "x$1" != 'x' ] ; then
+    . "$1"
+fi
+
+
+# Gather all the executable regular files listed in the PATH directories and
+# give them in argument to xmde-menu. Get the user choice in the $command
+# variable.
+#
+IFS=':'
+command=$(
+    for dir in $PATH ; do
+	for file in $dir/* ; do
+	    if [ ! -f "$file" ] ; then
+		continue
+	    elif [ ! -x "$file" ] ; then
+		continue
+	    fi
+            echo ${file##*/}
+	done
+    done | xmde-menu
+       )
+
+
+# If $command should be executed in a terminal because either it is asked
+# explicitely in the configuration file, or because it is linked to a library
+# that requires it, then launch in a terminal.
+#
+for cmd in $APPMENU_IN_TERMINAL ; do
+    if [ "x$command" = "x$cmd" ] ; then
+	exec "${APPMENU_TERMINAL:-urxvt}" -e "$command"
+    fi
+done
+
+for lib in $APPMENU_LIB_IN_TERMINAL ; do
+    if ldd `which "$command"` | grep -q "$lib" ; then
+	exec "${APPMENU_TERMINAL:-urxvt}" -e "$command"
+    fi
+done
+
+
+# Otherwise, launch directly by replacing the code of this very process.
+#
+exec "$command"

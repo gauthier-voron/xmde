@@ -1,0 +1,100 @@
+#!/bin/bash
+
+LOCKSCREEN_TEMPLATE='/etc/xmde/lockscreen.txt'
+
+
+xset_dump() {
+    xset q | perl -wnle '
+        if (/^.*prefer blanking:\s*(yes|no).*allow exposures:\s*(yes|no).*$/) {
+            ($blank, $expose) = ($1, $2);
+            if ($blank eq "yes") { $blank = "" }
+            $blank .= "blank";
+            if ($expose eq "yes") { $expose = "" }
+            $expose .= "expose";
+            printf "%s %s", $blank, $expose;
+        }
+        /^.*timeout:\s*(\d+).*cycle:\s*(\d+).*$/
+            and printf " %s %s", $1, $2;
+        /^.*Standby:\s*(\d+).*Suspend:\s*(\d+).*Off:\s*(\d+).*$/
+            and printf " %s %s %s", $1, $2, $3;
+        if (/^.*DPMS is (Enabled|Disabled).*$/) {
+            if ($1 eq "Enabled") { $dpms = "+dpms" }
+            else                 { $dpms = "-dpms" }
+            printf " %s", $dpms;
+        }
+    '
+}
+
+xset_load() {
+    local dump="$1" ; shift
+    local blank expose timeout cycle standby suspend off dpms
+
+    read blank expose timeout cycle standby suspend off dpms <<< "$dump"
+
+    xset s "$blank"
+    xset s "$expose"
+    xset s "$timeout" "$cycle"
+    xset dpms "$standby" "$suspend" "$off"
+    xset "$dpms"
+}
+
+print_lockscreen() {
+    local cols height i w width wspace wspacelen
+    cols="$VCONSOLE_COLUMNS"
+    rows="$VCONSOLE_LINES"
+    height=0
+    width=0
+
+    if ! echo "$cols" | grep -qE '^[[:digit:]]+$' || [ $cols -gt 256 ] ; then
+	cols=0
+    fi
+    if ! echo "$rows" | grep -qE '^[[:digit:]]+$' || [ $rows -gt 256 ] ; then
+	rows=0
+    fi
+
+    while read -r line ; do
+	w=$(echo "$line" | wc -c)
+	if [ $w -gt $width ] ; then
+	    width=$w
+	fi
+	height=$(( height + 1 ))
+    done < "$LOCKSCREEN_TEMPLATE"
+
+    wspacelen=$(( ( cols - width ) / 2 ))
+    wspace=''
+    for i in $(seq 0 $wspacelen) ; do
+	wspace="$wspace "
+    done
+
+    hspacelen=$(( ( rows - height ) / 2 ))
+    for i in $(seq 0 $hspacelen) ; do
+	echo
+    done
+
+    sed -e 's/^/'"$wspace"'/' "$LOCKSCREEN_TEMPLATE"
+
+    for i in $(seq 0 $(( hspacelen - 5 ))) ; do
+	echo
+    done
+    printf " "
+}
+
+if [ -e "/var/run/user/$UID/xmde/vconsole" ] ; then
+    VCONSOLE_COLUMNS=$(sed -nr 's/^VCONSOLE_COLUMNS=//p' \
+			   "/var/run/user/$UID/xmde/vconsole")
+    VCONSOLE_LINES=$(sed -nr 's/^VCONSOLE_LINES=//p' \
+			 "/var/run/user/$UID/xmde/vconsole")
+fi
+
+xsetparms=$(xset_dump)
+
+xset s 30 30
+xset s blank
+xset s expose
+xset +dpms
+xset dpms 30 30 30
+
+(
+    physlock -p "`print_lockscreen`"
+    xset_load "$xsetparms"
+) &

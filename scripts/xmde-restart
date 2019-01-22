@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+#   Restart the XMonad window manager.
+#   Ensure to kill the satellite processes, then call xmde-start with the
+#   restart option.
+#   Xmde-start ensures that the xmonad is started or restarted with the last
+#   version of the sources and recompile them if needed.
+#
+
+set -e
+
+# First step: kill the status bar and the highlight daemon
+# Since these processes are bound to a specific xmonad process, they must be
+# killed before to start a new instance.
+#
+killall -INT xmobar || true
+killall -INT xmde-highlight || true
+
+# Second step: prepare the log file
+# The restart is often called from Xmonad itself via a keybord shortcut. There
+# is thus no associated terminal to print compilation and runtime errors.
+# Before to to anything weird, redirect standard output and error streams in
+# a log file.
+#
+date=$(date '+%Y-%m-%d-%H-%M-%S')
+log=$(mktemp "/tmp/xmde-restart.XXXXXX.log")
+
+exec 1>> "$log"
+exec 2>> "$log"
+
+# Third step: restart xmonad
+# For this, simply call the xmde-start program with the '--restart' option.
+# Xmde-restart handle all the recompilation stuff by itself.
+# If the restart is successfull, then remove the log file.
+#
+if xmde-start --restart ; then
+    rm "$log"
+else
+    exit 1
+fi

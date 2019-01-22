@@ -1,0 +1,394 @@
+#!/usr/bin/perl -l
+
+use strict;
+use warnings;
+
+use Getopt::Long qw(GetOptionsFromArray);
+
+
+my $PROGNAME  = 'xmde-screen';
+my $VERSION   = '1.0.0';
+my $AUTHOR    = 'Gauthier Voron';
+my $EMAIL     = 'gauthier.voron@mnesic.fr';
+
+my $DEFCONF   = '/etc/xmde/screen.conf';
+my %CONFIG;
+
+
+sub error
+{
+    my ($message, $retcode) = @_;
+    my $progname = $0;
+
+    if (!defined($message)) { $message = 'undefined error'; }
+    if (!defined($retcode)) { $retcode = 1;                 }
+    $progname =~ s|^.*/||;
+
+    printf(STDERR "%s: %s\n", $progname, $message);
+    printf(STDERR "Please type '%s --help' for more information\n", $progname);
+
+    exit ($retcode);
+}
+
+sub opterr
+{
+    my ($message) = @_;
+
+    if ($message =~ /^Unknown option: (.*)$/) {
+	error("unknown option '$1'");
+    } else {
+	printf(STDERR "%s", $message);
+    }
+}
+
+
+sub usage
+{
+    return <<"EOF"
+Usage: $0 [options] list
+       $0 [options] set <setup>
+
+List or change the screen setup. The list mode list only the available screen
+configurations that could be enabled right now.
+The possible setups depend on a list of builtin setups and possibly custom
+setups defined in a configuration file.
+
+Options:
+  -C, --config <path>    Use an alternate config file (default: $DEFCONF)
+  -h, --help             Print this help message and exit.
+  -V, --version          Print the version message and exit.
+EOF
+}
+
+sub version
+{
+    return <<"EOF"
+$PROGNAME $VERSION
+$AUTHOR
+$EMAIL
+EOF
+}
+
+
+my $__xrandr_status = undef;
+
+sub xrandr_status
+{
+    if (!defined($__xrandr_status)) {
+	$__xrandr_status = `xrandr --current`;
+    }
+
+    return $__xrandr_status;
+}
+
+sub refresh_xrandr_status
+{
+    $__xrandr_status = undef;
+    xrandr_status();
+}
+
+sub list_screens
+{
+    my $xstatus = xrandr_status();
+    my ($line, @screens);
+
+    foreach $line (split("\n", $xstatus)) {
+	if ($line =~ /^(\S+)\s+(dis)?connected.*/) {
+	    push(@screens, $1);
+	}
+    }
+
+    return @screens;
+}
+
+sub list_connected_screens
+{
+    my $xstatus = xrandr_status();
+    my ($line, @screens);
+
+    foreach $line (split("\n", $xstatus)) {
+	if ($line =~ /^(\S+)\s+connected.*/) {
+	    push(@screens, $1);
+	}
+    }
+
+    return @screens;
+}
+
+sub screen_resolution
+{
+    my ($screen) = @_;
+    my $xstatus = xrandr_status();
+    my ($line, $enabled);
+
+    $enabled = 0;
+    foreach $line (split("\n", $xstatus)) {
+	if ($line =~ /^$screen\s*connected/) {
+	    $enabled = 1;
+	    next;
+	} elsif ($enabled == 0) {
+	    next;
+	}
+
+	if ($line =~ /^\s*(\d+)x(\d+).*\*/) {
+	    return ($1, $2);
+	}
+    }
+}
+
+sub setup_custom
+{
+    my ($config) = @_;
+    my @screens = list_screens();
+    my (@command) = ('xrandr');
+    my ($screen, $key, $value, $state);
+
+    foreach $screen (@screens) {
+	if (!grep { $screen eq $_ } keys(%$config)) {
+	    push(@command, '--output', $screen, '--off');
+	}
+    }
+
+    foreach $screen (keys(%$config)) {
+	push(@command, '--output', $screen);
+	$state = 0;
+
+	foreach $key (keys(%{$config->{$screen}})) {
+	    $value = $config->{$screen}->{$key};
+
+	    if (grep { $key eq $_ } qw(on off auto)) {
+		$state = 1;
+	    }
+
+	    if (grep { $key eq $_ } qw(on off auto primary)) {
+		if (grep { lc($value) eq $_ } qw(1 y yes t true)) {
+		    push(@command, '--' . $key);
+		}
+	    } else {
+		push(@command, '--' . $key, $value);
+	    }
+	}
+
+	if ($state == 0) {
+	    push(@command, '--auto');
+	}
+    }
+
+    system(@command);
+}
+
+sub parse_config
+{
+    my ($path) = @_;
+    my ($fh, $line, $section, $screen);
+    my (%setups, %configs, $config, $props, $skip);
+    my @screens = list_connected_screens();
+
+    if (!open($fh, '<', $path)) {
+	return ();
+    }
+
+    while (defined($line = <$fh>)) {
+	chomp($line);
+	$line =~ s/#.*$//;
+	if ($line =~ /^\s*$/) {
+	    next;
+	}
+
+	if ($line =~ /^\s*\[([^:]+):(.+)\]\s*$/) {
+	    if (defined($section) && defined($screen)) {
+		$configs{$section}->{$screen} = $props;
+		$props = {};
+	    }
+	    ($section, $screen) = ($1, $2);
+	    next;
+	}
+
+	if ($line =~ /\s*(\S+)\s*=\s*(\S+)\s*$/) {
+	    $props->{$1} = $2;
+	}
+    }
+
+    if (defined($section) && defined($screen)) {
+	$configs{$section}->{$screen} = $props;
+	$props = {};
+    }
+
+    foreach $config (keys(%configs)) {
+	$skip = 0;
+	foreach $screen (keys(%{$configs{$config}})) {
+	    if (!grep { $screen eq $_ } @screens) {
+		$skip = 1;
+		last;
+	    }
+	}
+
+	if ($skip == 0) {
+	    $setups{$config} = sub { setup_custom($configs{$config}) };
+	}
+    }
+
+    return %setups;
+}
+
+sub setup_mono
+{
+    my ($screen) = @_;
+    my @screens = list_screens();
+    my @command = ('xrandr');
+    my $s;
+
+    for $s (grep { $_ ne $screen } @screens) {
+	push(@command, '--output', $s, '--off');
+    }
+
+    push(@command, '--output',$screen, '--auto', '--scale','1x1', '--primary');
+    system(@command);
+}
+
+sub setup_mirror
+{
+    my ($main_screen, $aux_screen) = @_;
+    my (@cmd, $s, $mw, $mh, $aw, $ah, $w, $h);
+    my @screens = list_screens();
+    my @command = ('xrandr');
+
+    for $s (grep { ($_ ne $main_screen) && ($_ ne $aux_screen) } @screens) {
+	push(@command, '--output', $s, '--off');
+    }
+
+    @cmd = @command;
+    push(@cmd, '--output', $aux_screen, '--auto');
+    push(@cmd, '--output', $main_screen, '--auto',
+	 '--same-as', $aux_screen, '--scale', '1x1', '--primary');
+
+    system(@cmd);
+    refresh_xrandr_status();
+
+    ($mw, $mh) = screen_resolution($main_screen);
+    ($aw, $ah) = screen_resolution($aux_screen);
+    $w = $aw / $mw;
+    $h = $ah / $mh;
+
+    @cmd = @command;
+    push(@cmd, '--output', $aux_screen, '--auto');
+    push(@cmd, '--output', $main_screen, '--auto',
+	 '--same-as', $aux_screen, '--scale', sprintf("%.2fx%.2f", $w, $h),
+	 '--primary');
+
+    system(@cmd);
+}
+
+sub setup_dual
+{
+    my ($main_screen, $aux_screen) = @_;
+    my @screens = list_screens();
+    my @command = ('xrandr');
+    my $s;
+
+    for $s (grep { ($_ ne $main_screen) && ($_ ne $aux_screen) } @screens) {
+	push(@command, '--output', $s, '--off');
+    }
+
+    push(@command, '--output', $aux_screen, '--auto');
+    push(@command, '--output', $main_screen, '--auto',
+	 '--left-of', $aux_screen, '--scale', '1x1', '--primary');
+
+    system(@command);
+}
+
+sub build_setups
+{
+    my @screens = list_connected_screens();
+    my $main_screen = shift(@screens);
+    my ($screen, %setups, $custom);
+
+    $setups{'mono'} = sub { setup_mono($main_screen) };
+
+    if (scalar(@screens) > 0) {
+	$setups{'mono-' . $main_screen} = $setups{'mono'};
+    }
+
+    if (scalar(@screens) == 1) {
+	$setups{"mirror"} = sub { setup_mirror($main_screen, $screens[0]) };
+	$setups{'dual'} = sub { setup_dual($main_screen, $screens[0]) };
+    }
+
+    foreach $screen (@screens) {
+	$setups{'mono-' . $screen} = sub { setup_mono($screen) };
+	$setups{"mirror-$screen"} = sub { setup_mirror($main_screen, $screen)};
+	$setups{"dual-$screen"} = sub { setup_dual($main_screen, $screen) };
+    }
+
+    foreach $custom (keys(%CONFIG)) {
+	$setups{$custom} = $CONFIG{$custom};
+    }
+
+    return %setups;
+}
+
+sub main_list
+{
+    my %setups = build_setups();
+
+    printf("%s\n", join("\n", sort keys(%setups)));
+
+    return 0;
+}
+
+sub main_set
+{
+    my ($setup) = @_;
+    my %setups = build_setups();
+
+    if (!defined($setup)) {
+	error("missing setup operand");
+    } elsif (!defined($setups{$setup})) {
+	error("unknown setup operand '$setup'");
+    }
+
+    $setups{$setup}->();
+    system('xmde-restart');
+
+    return 0;
+}
+
+sub main
+{
+    my ($command, $setup, $config);
+
+    Getopt::Long::Configure('bundling');
+    Getopt::Long::Configure('permute');
+    $SIG{__WARN__} = \&opterr;
+    GetOptionsFromArray(
+	\@_,
+	'C|config=s' => \$config,
+	'h|help'     => sub { printf("%s", usage());   exit (0); },
+	'V|version'  => sub { printf("%s", version()); exit (0); }
+	);
+    $SIG{__WARN__} = undef;
+
+    if (!defined($config)) {
+	%CONFIG = parse_config($DEFCONF);
+    } else {
+	%CONFIG = parse_config($config);
+    }
+
+    $command = shift();
+    if (!defined($command)) {
+	error("missing command operand");
+    }
+
+    if ($command eq 'list') {
+	return main_list();
+    } elsif ($command eq 'set') {
+	return main_set(@_);
+    } else {
+	error("unknown command operand '$command'");
+    }
+
+    return 0;
+}
+
+exit (main(@ARGV));
+__END__

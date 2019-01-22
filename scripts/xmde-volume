@@ -1,0 +1,57 @@
+#!/bin/sh
+
+set -e
+
+
+if [ $# -eq 1 ] ; then
+    command="$1" ; shift
+elif [ $# -eq 0 ] ; then
+    command="show"
+else
+    exit 1
+fi
+
+
+volume=`amixer sget Master | tail -n 1 | sed -r 's/^.*\[([[:digit:]]+)%\].*$/\1/'`
+mutemx=`amixer sget Master | tail -n 1 | sed -r 's/^.*\[(on|off)\].*$/\1/'`
+
+
+case "$command" in
+    up)
+	volume=$(( $volume + 10 ))
+	if [ $volume -gt 100 ] ; then
+	    volume=100
+	fi
+	
+	amixer sset Master unmute   > /dev/null
+	amixer sset Master $volume% > /dev/null
+	$0
+	;;
+    down)
+	volume=$(( $volume - 10 ))
+	if [ $volume -lt 0 ] ; then
+	    volume=0
+	fi
+
+	amixer sset Master unmute   > /dev/null
+	amixer sset Master $volume% > /dev/null
+	$0
+	;;
+    mute)
+	amixer sset Master toggle   > /dev/null
+	$0
+	;;
+    show)
+	if [ "$mutemx" = "on" ] ; then
+	    echo $volume
+	else
+	    echo 0
+	fi
+	exit 0
+	;;
+    *)
+	exit 1
+esac
+
+
+exit 0

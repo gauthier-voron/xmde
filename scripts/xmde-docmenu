@@ -1,0 +1,103 @@
+#!/bin/sh
+#
+#   Launch the XMonad Window Manager document menu.
+#   Ask for the user to type a document name and display it.
+#   The file extensions to watch for and the program to display it are listed
+#   in a provided configuration file.
+#
+
+set -e
+
+
+# Preliminary step: check if the 'locate' command is available.
+# Without this command, we cannot fast look for file extensions and thus we
+# exit with error code.
+#
+if ! which locate > /dev/null ; then
+    echo "Missing program 'locate'"
+    echo "Aborting"
+    exit 1
+fi >&2
+
+
+# If there is an argument, this is the configuration file.
+# Source it blindly, this program should not be executed with privileges
+# anyway.
+#
+if [ "x$1" != 'x' ] ; then
+    . "$1"
+fi
+
+
+# Step 1: collect all the file extensions to look for from the DOCMENU_EXT
+# variable. This variable should have been set in the configuration file.
+#
+extensions=''
+separator=''
+
+IFS=':'
+for category in $DOCMENU_EXT ; do
+    exts="${category##*=}"
+    extensions="${extensions}${separator}${exts}"
+    separator='|'
+done
+
+# Step 2: use locate to find all the files with the collected file extensions.
+# Only print the basename as it is often sufficient to identify the desired
+# file.
+# Locate the files in parallel for better performance.
+#
+document=$(
+    (
+	IFS='|'
+	for ext in $extensions ; do
+	    locate ".$ext" | sed 's/^.*\///' &
+	done
+	wait
+    ) | xmde-menu
+	 )
+
+# Step 3: check if there is only one file in the system with the given name.
+# Still use the locate command but which should be much faster since we
+# decreased the number of possible results.
+#
+count=$(locate "$document" | wc -l)
+
+# If no file matches the given name, exit with error code.
+#
+if [ $count -eq 0 ] ; then
+    exit 1
+fi
+
+# If more than one file matches the name, ask the user to choose with the
+# complete path.
+#
+if [ $count -gt 1 ] ; then
+    document=$(locate "$document" | xmde-menu)
+
+# If exactly one file matches, locate it to get the complete path.
+#
+else
+    document=$(locate "$document")
+fi
+
+
+# Step 4: Look in the DOCMENU_EXT which command to use to display the document.
+# Once the command is found, execute it in the current process.
+# If no command matches, exit with an error code.
+#
+match="${document##*.}"
+IFS=':'
+for category in $DOCMENU_EXT ; do
+    app="${category%=*}"
+    exts="${category##*=}"
+    IFS='|'
+    for ext in $exts ; do
+	if [ "$ext" = "$match" ] ; then
+	    exec "$app" "$document"
+	fi
+    done
+    IFS=':'
+done
+
+exit 1

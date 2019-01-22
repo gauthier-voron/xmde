@@ -1,0 +1,379 @@
+#!/usr/bin/perl -l
+
+use strict;
+use threads;
+use threads::shared;
+use warnings;
+
+use POSIX qw(strftime :sys_wait_h);
+use Time::HiRes qw(usleep);
+
+
+my $COND :shared;
+
+
+sub update
+{
+    lock($COND);
+    cond_broadcast($COND);
+}
+
+sub sum
+{
+    my $sum = 0;
+
+    foreach (@_) {
+	$sum += $_;
+    }
+
+    return $sum;
+}
+
+sub avg
+{
+    my $sum = sum(@_);
+    return ($sum / scalar(@_));
+}
+
+sub listdir
+{
+    my ($path) = @_;
+    my ($fh, @ret);
+
+    if (!opendir($fh, $path)) {
+	return undef;
+    }
+
+    @ret = grep { ! /^\.\.?$/ } readdir($fh);
+    closedir($fh);
+
+    return @ret;
+}
+
+sub readfile
+{
+    my ($path) = @_;
+    my ($fs, $ret);
+
+    if (!open($fs, '<', $path)) {
+	return undef;
+    }
+
+    local $/ = undef;
+    $ret = <$fs>;
+    close($fs);
+
+    return $ret;
+}
+
+
+sub updateClock
+{
+    my ($dest) = @_;
+    my ($sec, $min, $hour, $mday, $mon, $wday);
+    my @mn = qw(jan. fév. mars avr. mai juin juil. août sep. oct. nov. déc.);
+    my @wn = qw(lun. mar. mer. jeu. ven. sam. dim.);
+
+    while (1) {
+	($sec, $min, $hour, $mday, $mon, $_, $wday) = localtime(time());
+	$$dest = sprintf("%s %d %s %02d:%02d:%02d",
+			 $wn[$wday - 1], $mday, $mn[$mon], $hour, $min, $sec);
+	update();
+	sleep(1);
+    }
+}
+
+sub updateBattery
+{
+    my ($dest) = @_;
+    my ($current, $full, $charge, $val);
+
+    while (1) {
+	$current = readfile('/sys/class/power_supply/BAT0/charge_now');
+	$full = readfile('/sys/class/power_supply/BAT0/charge_full');
+	$charge = readfile('/sys/class/power_supply/AC/online');
+
+	if (defined($current) && defined($full) && defined($charge)) {
+	    chomp($current);
+	    chomp($full);
+	    chomp($charge);
+
+	    $val = int(($current * 100 / $full) / 25);
+	    $$dest = '1' x $val . '0' x (4 - $val);
+	    $$dest .= 'c' if ($charge eq '1');
+	} else {
+	    $$dest = '';
+	}
+
+	update();
+	sleep(3);
+    }
+}
+
+sub updateEthernet
+{
+    my ($dest) = @_;
+    my $sysdir = '/sys/class/net';
+    my ($iface, $line, $path, $prev);
+    my ($rx, $tx, $lastrx, $lasttx) = (0, 0, 0, 0);
+    my ($minsleep, $sleep, $maxsleep) = (200000, 200000, 1000000);
+    my $buffer;
+
+    while (1) {
+	($rx, $tx, $buffer) = (0, 0, '');
+
+	foreach $iface (listdir($sysdir)) {
+	    $path = $sysdir . '/' . $iface . '/';
+	    if (!(-e ($path . 'device')) || (-e ($path . 'wireless'))) {
+		next;
+	    } elsif (readfile($path . 'operstate') eq "down\n") {
+		next;
+	    }
+
+	    chomp($line = readfile($path . 'statistics/tx_bytes'));
+	    $tx += $line;
+
+	    chomp($line = readfile($path . 'statistics/rx_bytes'));
+	    $rx += $line;
+	}
+
+	if (($tx != 0) || ($rx != 0)) {
+	    if ($tx != $lasttx) { $buffer .= '1' } else { $buffer .= '0' }
+	    if ($rx != $lastrx) { $buffer .= '1' } else { $buffer .= '0' }
+	}
+
+	$prev = $$dest;
+	$$dest = $buffer;
+
+	if ($prev ne $$dest) {
+	    update();
+	    $sleep = $minsleep;
+	} elsif ($sleep < $maxsleep) {
+	    $sleep += $minsleep;
+	}
+
+	usleep($sleep);
+
+	$lastrx = $rx;
+	$lasttx = $tx;
+    }
+}
+
+sub updateCpu
+{
+    my ($dest) = @_;
+    my $cpupath = '/proc/stat';
+    my ($content, $line, @jiffies, $prev, $val);
+    my ($total, $idle, $work, $lasttotal, $lastwork);
+    my ($minsleep, $sleep, $maxsleep) = (500000, 500000, 3000000);
+
+    $lasttotal = 0;
+    $lastwork = 0;
+
+    while (1) {
+	$content = readfile($cpupath);
+	foreach $line (split("\n", $content)) {
+	    if (!($line =~ /^cpu\s+(.*)$/)) {
+		next;
+	    }
+
+	    @jiffies = split(/\s+/, $1);
+	    $total = sum(@jiffies);
+	    $idle = sum($jiffies[3], $jiffies[4]);
+	    $work = $total - $idle;
+
+	    last;
+	}
+
+	$prev = $$dest;
+	if ($total != $lasttotal) {
+	    $val = int((($work-$lastwork) * 100 / ($total-$lasttotal)) / 25);
+	    $$dest = '1' x $val . '0' x (4 - $val);
+	}
+
+	if ($$dest ne $prev) {
+	    $sleep = $minsleep;
+	    update();
+	} elsif ($sleep < $maxsleep) {
+	    $sleep += $minsleep;
+	}
+
+	$lasttotal = $total;
+	$lastwork = $work;
+
+	usleep($sleep);
+    }
+}
+
+sub updateMem
+{
+    my ($dest) = @_;
+    my $mempath = '/proc/meminfo';
+    my ($content, $line, $total, $avail, $prev, $val);
+    my ($minsleep, $sleep, $maxsleep) = (500000, 500000, 3000000);
+
+    while (1) {
+	$content = readfile($mempath);
+	foreach $line (split("\n", $content)) {
+	    if ($line =~ /^MemTotal:\s*(\d+)/) {
+		$total = $1;
+	    } elsif ($line =~ /^MemAvailable:\s*(\d+)/) {
+		$avail = $1;
+	    }
+	}
+
+	$prev = $$dest;
+	$val = 100 - ($avail * 100 / $total);
+	   if ($val < 40) { $$dest = '00' }
+	elsif ($val < 80) { $$dest = '10' }
+	else              { $$dest = '11' }
+
+	if ($$dest ne $prev) {
+	    $sleep = $minsleep;
+	    update();
+	} elsif ($sleep < $maxsleep) {
+	    $sleep += $minsleep;
+	}
+
+	usleep($sleep);
+    }
+}
+
+sub updateWifi
+{
+    my ($dest) = @_;
+    my $mempath = '/proc/net/wireless';
+    my ($content, $line, $quality, $prev, $val);
+    my ($minsleep, $sleep, $maxsleep) = (500000, 500000, 5000000);
+
+    while (1) {
+	$quality = 0;
+
+	$content = readfile($mempath);
+	foreach $line (split("\n", $content)) {
+	    if ($line =~ /^.*:\s*\d+\s+(\d+)/) {
+		$quality = $1;
+		last;
+	    }
+	}
+
+	$prev = $$dest;
+	$val = int($quality / 16);
+	$$dest = '1' x $val . '0' x (4 - $val);
+
+	if ($$dest ne $prev) {
+	    $sleep = $minsleep;
+	    update();
+	} elsif ($sleep < $maxsleep) {
+	    $sleep += $minsleep;
+	}
+
+	usleep($sleep);
+    }
+}
+
+sub updateVolume
+{
+    my ($dest) = @_;
+    my ($pid, $fh, $line, $vol);
+    my $first = 1;
+
+    if (!(-e '/usr/bin/alsactl')) {
+	return;
+    }
+
+  restart:
+    $pid = open($fh, '-|');
+    if ($pid == 0) {
+	exec ('stdbuf', '-oL', 'alsactl', 'monitor');
+	die ($!)
+    }
+
+    while (1) {
+	if ($first == 0) {
+	    if (!defined($line = <$fh>)) {
+		if (waitpid($pid, WNOHANG) == $pid) {
+		    goto restart;
+		} else {
+		    next;
+		}
+	    }
+
+	    chomp($line);
+	    if (!($line =~ /Master/)) {
+		next;
+	    }
+	}
+
+	$first = 0;
+
+	$vol = `xmde-volume`;
+	chomp($vol);
+
+	$$dest = $vol;
+	update();
+    }
+}
+
+sub main
+{
+    my $prev = "";
+    my $current = "";
+    my $sep = "";
+    my $battery  :shared = "";
+    my $volume   :shared = "";
+    my $ethernet :shared = "";
+    my $wifi     :shared = "";
+    my $cpu      :shared = "";
+    my $mem      :shared = "";
+    my $date     :shared = "";
+
+    lock($COND);
+
+    threads->create(sub { updateBattery(\$battery) });
+    threads->create(sub { updateVolume(\$volume) });
+    threads->create(sub { updateWifi(\$wifi) });
+    threads->create(sub { updateEthernet(\$ethernet) });
+    threads->create(sub { updateCpu(\$cpu) });
+    threads->create(sub { updateMem(\$mem) });
+    threads->create(sub { updateClock(\$date) });
+
+    while (1) {
+	cond_wait($COND);
+
+	$current = '';
+	$sep = '';
+
+	if ($battery ne '') {
+	    $current = sprintf("<icon=battery/battery%s.xpm/>", $battery);
+	    $sep = ' ';
+	}
+
+	if ($volume ne '') {
+	    $current .= $sep;
+	    $current .= sprintf("<icon=volume/%s/>", $volume);
+	    $sep = ' ';
+	}
+
+	if ($ethernet ne '') {
+	    $current .= $sep;
+	    $current .= sprintf("<icon=network/wired%s.xpm/>", $ethernet);
+	    $sep = ' ';
+	} else {
+	    $current .= $sep;
+	    $current .= sprintf("<icon=network/wifi%s.xpm/>", $wifi);
+	    $sep = ' ';
+	}
+
+	$current .= sprintf(" <icon=hardware/hardware%s-%s.xpm/> %s ",
+			    $cpu, $mem, $date);
+
+	if ($current ne $prev) {
+	    $| = 1;
+	    printf("%s\n", $current);
+	    $prev = $current;
+	}
+    }
+}
+
+exit (main(@ARGV));
