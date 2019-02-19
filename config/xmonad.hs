@@ -68,8 +68,7 @@ xmdeKeyControls conf@(XConfig { XMonad.modMask= modMask }) = M.fromList $
   -- Applications quick launch and controls
   [ (( mod4Mask, xK_a ), spawn ( "xmde-appmenu "    ++ xmenuConfig ) )
   , (( mod4Mask, xK_d ), spawn ( "xmde-docmenu "    ++ xmenuConfig ) )
-  , (( mod4Mask, xK_w ), spawn ( "xmde-urlmenu "    ++ xmenuConfig ) )
-  , (( mod4Mask, xK_s ), spawn ( "xmde-screenmenu " ++ xmenuConfig ) )
+  , (( mod4Mask, xK_s ), spawn ( "xmde-screenmenu "                ) )
   , (( mod4Mask, xK_q ), kill )
   , (( mod4Mask, xK_t ), spawn "urxvt" )
 
