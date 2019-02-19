@@ -1,0 +1,12 @@
+[Unit]
+Description=screen locker
+Before=sleep.target
+
+[Service]
+Type=forking
+PIDFile=/run/xmde-lock.pid
+Environment=DISPLAY=:0
+ExecStart=/usr/bin/xmde-lock --daemon /run/xmde-lock.pid
+
+[Install]
+WantedBy=suspend.target
