@@ -1,7 +1,51 @@
 #!/bin/bash
+#
+#   Screen locker of the XMonad Desktop Environment
+#
+#   Lock the screen / tty / console and put the physical screen in low energy
+#   mode until the user unlock the screen.
+#   Relies on physlock for the actual screen locking and on xset for the
+#   energy settings.
+#
+#   This file is part of the XMonad Desktop Environment.
+#
 
 LOCKSCREEN_TEMPLATE='/etc/xmde/lockscreen.txt'
 
+get_owner_of_display() {
+    local user exe args
+
+    ps -eo user,args | while read user exe args ; do
+	if [ "x$exe" != 'x/usr/lib/Xorg' ] ; then
+	    continue
+	elif ! echo "$args" | grep -q " $DISPLAY " ; then
+	    continue
+	fi
+
+	echo "$user"
+	break
+    done
+}
+
+is_already_locked() {
+    local user exe inst
+
+    inst=$(ps -eo user,comm | while read user exe ; do
+	if [ "x$exe" != 'xphyslock' ] ; then
+	    continue
+	elif [ "x$user" != 'xroot' ] ; then
+	    continue
+	fi
+
+	echo "yes"
+    done | wc -l)
+
+    if [ $inst -gt 0 ] ; then
+	return 0
+    else
+	return 1
+    fi
+}
 
 xset_dump() {
     xset q | perl -wnle '
@@ -79,6 +123,115 @@ print_lockscreen() {
     printf " "
 }
 
+usage() {
+    printf "Usage: $0 [ --help | --version | --daemon ]\n"
+    echo
+    printf "Lock the screen indicated by the DISPLAY environment variable.\n"
+    printf "More precisely, detect which user launched the Xorg server that manages the\n"
+    printf "screen indicated by DISPLAY and make this user launches physlock.\n"
+    echo
+    printf "Also set the screen parameters to activate the screen energy saver while the\n"
+    printf "sreen is locked.\n"
+    echo
+    printf "As a cosmetic, display the text located in '${LOCKSCREEN_TEMPLATE}'.\n"
+    printf "The content is centered in the screen according the the screen dimensions\n"
+    printf "stored in '/var/run/user/\$UID/xmde/vconsole'.\n"
+    echo
+    printf "Options:\n"
+    echo
+    printf "  -d, --daemon <path>  Launch physlock in background and returns once the screen\n"
+    printf "                       is actually locked. Print the PID of physlock on <path>\n"
+    printf "                       or stdout if <path> is '-'.\n"
+    echo
+    printf "  -h, --help           Print this help message and exit.\n"
+    echo
+    printf "  -V, --version        Print version information and exit.\n"
+    echo
+}
+
+version() {
+    printf "xmde-lock 1.0.0\n"
+    printf "Gauthier Voron\n"
+    printf "gauthier.voron@mnesic.fr\n"
+}
+
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+# Main script starts here
+# - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+# Parse the options.
+# We do not support full GNU syntax for option, so no need for complex parsing
+# mechanism.
+#
+daemon=0
+pidpath=''
+while [ $# -gt 0 ] ; do
+    case "$1" in
+	'-d'|'--daemon')  daemon=1 ; shift ; pidpath="$1" ;;
+	'-h'|'--help')    usage ; exit 0 ;;
+	'-V'|'--version') version ; exit 0 ;;
+	*) echo "unknown option '$1'" >&2 ; exit 1 ;;
+    esac
+    shift
+done
+
+# If the --daemon option is given with no argument, signal an error.
+#
+if [ $daemon -eq 1 -a "x$pidpath" = 'x' ] ; then
+    echo "option '--daemon' requires a value" >&2
+    exit 1
+fi
+
+# If the daemon option has been affected a value, redirect standard output to
+# this file before the su command because after, we could have insufficient
+# permissions.
+#
+if [ "x$pidpath" != 'x' -a "x$pidpath" != 'x-' ] ; then
+    exec > "$pidpath"
+fi
+
+# Check that there is not already an instance of physlock running. This may
+# happen if the user manually lock the screen, then closes the lid, leading
+# to the suspend.service trying to lock again.
+#
+if is_already_locked ; then
+    echo "Screen already locked" >&2
+    exit 1
+fi
+
+# Detect the user owning the current $DISPLAY
+# If we are not this owner, two cases:
+#   - we are root, then su to this user and start again
+#   - we are not root, then we cannot lock the screen and abort
+# If we are this owner, continue.
+#
+user=$(get_owner_of_display)
+iam=$(whoami)
+
+if [ "x$user" = 'x' ] ; then
+    echo "Cannot find any user for display '$DISPLAY'" >&2
+    exit 1
+elif [ "x$user" != "x$iam" ] ; then
+    if [ "x$iam" = 'xroot' ] ; then
+	if [ $daemon -eq 0 ] ; then
+	    # If no daemon mode, just launch xmde-lock with no option.
+	    #
+	    exec su "$user" -m -c "$0"
+	else
+	    # If daemon mode, launch xmde-lock with --daemon to stdout option.
+	    # The stdout is already redirected here and with root privilege.
+	    #
+	    exec su "$user" -m -c "'$0' --daemon -"
+	fi
+    else
+	echo "Insufficient permission to lock '$DISPLAY'" >&2
+	exit 1
+    fi
+fi
+
+# Get back the original dimensions of the non-X console associated to the X
+# user, so we can pretty print the lockscreen logo.
+#
 if [ -e "/var/run/user/$UID/xmde/vconsole" ] ; then
     VCONSOLE_COLUMNS=$(sed -nr 's/^VCONSOLE_COLUMNS=//p' \
 			   "/var/run/user/$UID/xmde/vconsole")
@@ -86,6 +239,9 @@ if [ -e "/var/run/user/$UID/xmde/vconsole" ] ; then
 			 "/var/run/user/$UID/xmde/vconsole")
 fi
 
+# Save the screen energy parameters and set them so it turns off after 30 sec
+# of inactivity.
+#
 xsetparms=$(xset_dump)
 
 xset s 30 30
@@ -94,7 +250,41 @@ xset s expose
 xset +dpms
 xset dpms 30 30 30
 
-(
-    physlock -p "`print_lockscreen`"
+# Process differently in daemon mode than in normal mode.
+# Normal mode: lock the screen, on return, restore screen parameters.
+# Daemon mode: lock the screen in daemon, print the PID of physlock, then
+#   launch a background process that waits physlock stops and restore the
+#   screen parameters.
+#
+if [ $daemon -eq 0 ] ; then
+
+    # Lock the screen.
+    #
+    physlock -p "$(print_lockscreen)"
+
+    # Restore the screen energy parameters.
+    #
     xset_load "$xsetparms"
-) &
+
+else
+
+    # Lock the screen.
+    # Use an option to return only after the screen has been locked. This way
+    # we avoid race condition.
+    #
+    physlock -d -p "$(print_lockscreen)"
+    pid=$(pgrep physlock)
+    echo $pid
+
+    # Wait that no more physlock instance is running before to restore screen
+    # energy parameters.
+    # Only do that in background so this script can be used by system suspend.
+    #
+    (
+	while ps $pid > /dev/null 2> /dev/null ; do
+	    sleep 1
+	done
+	xset_load "$xsetparms"
+    ) &
+
+fi
