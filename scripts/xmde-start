@@ -5,7 +5,6 @@
 #   since the last update of binary, libraries or configuration files
 #
 
-
 # First step: locate the xmonad user configuration file.
 # If it does not exist, impossible to launch xmde. Print an error and exit.
 # If it exists, get its modification date.
@@ -23,19 +22,23 @@ fi>&2
 # If this executable does not exist, then recompile. Otherwise, get the
 # modification date.
 #
-for file in "$HOME/.xmonad/xmonad-"* ; do
-    if [ -f "$file" -a -x "$file" ] ; then
-	found="$file"
+while true ; do
+    for file in "$HOME/.xmonad/xmonad-"* ; do
+        if [ -f "$file" -a -x "$file" ] ; then
+	    found="$file"
+	    break
+        fi
+    done
+
+    if [ "x$found" = 'x' ] ; then
+        if ! xmonad --recompile ; then
+	    echo "xmde: cannot recompile xmonad"
+	    exit 1
+        fi >&2
+    else
 	break
     fi
 done
-
-if [ "x$found" = 'x' ] ; then
-    if ! xmonad --recompile ; then
-	echo "xmde: cannot recompile xmonad"
-	exit 1
-    fi >&2
-fi
 
 exectime=$(stat -c '%Z' "$found")
 

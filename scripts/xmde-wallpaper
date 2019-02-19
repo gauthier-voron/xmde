@@ -233,7 +233,8 @@ sub compose
 	$step++;
     }
 
-    system('feh', '--no-fehbg', '--bg-fill', $dir . '/step' . $step . '.png');
+    system('feh', '--no-fehbg', '--bg-fill', '--no-xinerama',
+	   $dir . '/step' . $step . '.png');
 }
 
 
