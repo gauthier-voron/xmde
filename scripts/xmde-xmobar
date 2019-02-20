@@ -70,14 +70,12 @@ sub readfile
 sub updateClock
 {
     my ($dest) = @_;
-    my ($sec, $min, $hour, $mday, $mon, $wday);
-    my @mn = qw(jan. fév. mars avr. mai juin juil. août sep. oct. nov. déc.);
-    my @wn = qw(lun. mar. mer. jeu. ven. sam. dim.);
+    my ($sec, $min, $hour, $mday, $mon, $year, $wday);
 
     while (1) {
-	($sec, $min, $hour, $mday, $mon, $_, $wday) = localtime(time());
-	$$dest = sprintf("%s %d %s %02d:%02d:%02d",
-			 $wn[$wday - 1], $mday, $mn[$mon], $hour, $min, $sec);
+	($sec, $min, $hour, $mday, $mon, $year, $wday) = localtime(time());
+	$$dest = strftime("%a %d %b %H:%M:%S", $sec, $min, $hour, $mday, $mon,
+			  $year, $wday);
 	update();
 	sleep(1);
     }
