@@ -326,6 +326,8 @@ sub main
     my $mem      :shared = "";
     my $date     :shared = "";
 
+    open(STDERR, '>', '/dev/null');
+
     lock($COND);
 
     threads->create(sub { updateBattery(\$battery) });
