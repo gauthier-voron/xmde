@@ -22,10 +22,12 @@ import qualified XMonad.StackSet as W
 
 xmobarConfig = "/etc/xmde/xmobar.conf"
 xmenuConfig  = "/etc/xmde/xmenu.conf"
+wallpaperDir = "/usr/share/wallpaper"
 
 
 main = do
   spawn "xmde-highlight"
+  spawn ( "xmde-wallpaper " ++ wallpaperDir )
   xmobar <- spawnPipe ( "xmobar " ++ xmobarConfig )
   xmonad $ ewmh azertyConfig
     { keys               = xmdeKeyControls
