@@ -28,4 +28,3 @@ The different scripts assume the following are installed:
   * xorg-xprop
   * xorg-xrandr
   * xorg-xset
-  * xorg-xsetroot
