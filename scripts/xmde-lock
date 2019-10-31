@@ -281,10 +281,11 @@ else
     # Only do that in background so this script can be used by system suspend.
     #
     (
+	trap "xset_load '$xsetparms'" 'EXIT'
+
 	while ps $pid > /dev/null 2> /dev/null ; do
 	    sleep 1
 	done
-	xset_load "$xsetparms"
     ) &
 
 fi
