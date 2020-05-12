@@ -1,0 +1,73 @@
+#!/bin/bash
+#
+#   Enable or disable the touchpad.
+#   Use `synclient` to get and modify the state of the touchpad.
+#   Without argument, print the touchpad state. Otherwise, either turn it `on`,
+#   `off` or `toggle` its state.
+#
+
+set -e
+
+
+# First check if synclient is an executable command.
+# Without it we cannot do anything so we complain and exit.
+#
+if ! command -v 'synclient' > '/dev/null' 2> '/dev/null' ; then
+    printf "xmde: cannot find command 'synclient'\n" >&2
+    exit 1
+fi
+
+
+# If synclient exists, define a function to get the touchpad state as a on/off
+# string.
+#
+get_state() {
+    local state="$(synclient | grep 'TouchpadOff')"
+
+    case "${state: -1}" in
+	'0') echo 'on'  ; return 0 ;;
+	'1') echo 'off' ; return 0 ;;
+	*)   echo '?'   ; return 1 ;;
+    esac
+}
+
+
+# If there is no argument, print the touchpad state and exit.
+#
+if [ $# -eq 0 ] ; then
+    get_state
+    exit 0
+fi
+
+
+# If there is an argument, change the touchpad state.
+# The argument is `on`, `off` or `toggle`. Otherwise complain and exit.
+#
+case "$1" in
+    'on')
+	synclient 'TouchpadOff=0'
+	;;
+    'off')
+	synclient 'TouchpadOff=1'
+	;;
+    'toggle')
+	case "$(get_state)" in
+	    'on')
+		synclient 'TouchpadOff=1'
+		;;
+	    'off')
+		synclient 'TouchpadOff=0'
+		;;
+	esac
+	;;
+    *)
+	printf "xmde: invalid operand '%s'\n" "$1" >&2
+	printf "must be 'on', 'off' or 'toggle'\n" >&2
+	exit 1
+	;;
+esac
+
+
+# Exit with success after changing the state.
+#
+exit 0
