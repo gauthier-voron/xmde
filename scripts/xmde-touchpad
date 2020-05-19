@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 #   Enable or disable the touchpad.
-#   Use `xinput` to get and modify the state of the touchpad.
+#   Use `synclient` to get and modify the state of the touchpad.
 #   Without argument, print the touchpad state. Otherwise, either turn it `on`,
 #   `off` or `toggle` its state.
 #
@@ -12,50 +12,22 @@ set -e
 # First check if synclient is an executable command.
 # Without it we cannot do anything so we complain and exit.
 #
-if ! command -v 'xinput' > '/dev/null' 2> '/dev/null' ; then
-    printf "cannot find command 'xinput'\n" >&2
+if ! command -v 'synclient' > '/dev/null' 2> '/dev/null' ; then
+    printf "xmde: cannot find command 'synclient'\n" >&2
     exit 1
 fi
 
 
-# Xinput operate on input device through their name or id.
-# However, the Archwiki says that the id may change. To avoid race condition,
-# we only use names.
-# Print the name of the first touchpad detected in the system.
-#
-get_touchpad_name() {
-    xinput list \
-        | perl -wnle 'm!\s*([\w\s:]*touchpad|synaptics)!i and print $1' \
-        | head -n1
-}
-
-# Print the state of the first touchpad detected in the system, either 'on' or
-# 'off'.
+# If synclient exists, define a function to get the touchpad state as a on/off
+# string.
 #
 get_state() {
-    local name="$(get_touchpad_name)"
+    local state="$(synclient | grep 'TouchpadOff')"
 
-    if xinput list-props "${name}" | grep -Pq 'Device Enabled.*1\s*$' ; then
-	echo 'on'
-    else
-	echo 'off'
-    fi
-}
-
-# Change the state of the first touchpad detected in the system to either 'on'
-# or 'off'.
-#
-set_state() {
-    local state="$1" ; shift
-    local name="$(get_touchpad_name)"
-
-    case "${state}" in
-	'on')
-	    xinput enable "${name}"
-	    ;;
-	'off')
-	    xinput disable "${name}"
-	    ;;
+    case "${state: -1}" in
+	'0') echo 'on'  ; return 0 ;;
+	'1') echo 'off' ; return 0 ;;
+	*)   echo '?'   ; return 1 ;;
     esac
 }
 
@@ -73,24 +45,24 @@ fi
 #
 case "$1" in
     'on')
-	set_state 'on'
+	synclient 'TouchpadOff=0'
 	;;
     'off')
-	set_state 'off'
+	synclient 'TouchpadOff=1'
 	;;
     'toggle')
 	case "$(get_state)" in
 	    'on')
-		set_state 'off'
+		synclient 'TouchpadOff=1'
 		;;
 	    'off')
-		set_state 'on'
+		synclient 'TouchpadOff=0'
 		;;
 	esac
 	;;
     *)
-	printf "invalid operand '%s'\n" "$1" >&2
-	printf "syntax: %s [ on | off | toggle ]\n" "$0" >&2
+	printf "xmde: invalid operand '%s'\n" "$1" >&2
+	printf "must be 'on', 'off' or 'toggle'\n" >&2
 	exit 1
 	;;
 esac
