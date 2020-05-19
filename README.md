@@ -28,7 +28,3 @@ The different scripts assume the following are installed:
   * xorg-xprop
   * xorg-xrandr
   * xorg-xset
-
-The xmde-touchpad script needs the following to be installed:
-
-  * xf86-input-synaptics
