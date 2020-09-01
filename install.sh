@@ -168,6 +168,10 @@ if [ "x$USERINST" != 'x/etc/skel' ] ; then
 	install -d -m755 $opts "$PREFIX/home/$userinst/.xmonad"
 	install -m644  $opts "config/xmonad.hs" \
 	     "$PREFIX/home/$userinst/.xmonad/xmonad.hs"
+
+	install -d -m755 $opts "$PREFIX/home/$userinst/.config/dunst"
+	install -m644 $opts "config/dunstrc" \
+	     "$PREFIX/home/$userinst/.config/dunst/dunstrc"
     done
 fi
 
