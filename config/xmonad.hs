@@ -27,6 +27,7 @@ wallpaperDir = "/usr/share/wallpaper"
 
 main = do
   spawn "xmde-highlight"
+  spawn "xmde-mpd-notify"
   spawn ( "xmde-wallpaper " ++ wallpaperDir )
   xmobar <- spawnPipe ( "xmobar " ++ xmobarConfig )
   xmonad $ ewmh azertyConfig

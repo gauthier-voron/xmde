@@ -9,12 +9,14 @@
 
 set -e
 
-# First step: kill the status bar and the highlight daemon
+# First step: kill the status bar, the highlight daemon and the mpd-notify
+# daemon.
 # Since these processes are bound to a specific xmonad process, they must be
 # killed before to start a new instance.
 #
 killall -INT xmobar || true
 killall -INT xmde-highlight || true
+killall -INT xmde-mpd-notify || true
 
 # Second step: prepare the log file
 # The restart is often called from Xmonad itself via a keybord shortcut. There
