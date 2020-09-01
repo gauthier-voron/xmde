@@ -1,0 +1,7 @@
+#!/bin/sh
+#
+#   Import the DISPLAY variable for "systemctl --user" units.
+#   This should be called by the xmde rc file.
+#
+
+systemctl --user import-environment 'DISPLAY'
