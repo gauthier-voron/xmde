@@ -137,15 +137,11 @@ install -m644 "config/suspend.service" \
 # Install user specific files, depending on USERINST value.
 # Be sure to give ownership of installed files to appropriate user.
 #
-if [ "x$USERINST" = 'x/etc/skel' ] ; then
+install -d -m755 "$PREFIX/etc/skel/.xmonad"
+install -m644 "config/xmonad.hs" "$PREFIX/etc/skel/.xmonad/xmonad.hs"
 
-    install -d -m755 "$PREFIX/etc/skel/.xmonad"
-    install -m644 "config/xmonad.hs" "$PREFIX/etc/skel/.xmonad/xmonad.hs"
 
-else
-
-    install -d -m755 "$PREFIX/etc/skel/.xmonad"
-    install -m644 "config/xmonad.hs" "$PREFIX/etc/skel/.xmonad/xmonad.hs"
+if [ "x$USERINST" != 'x/etc/skel' ] ; then
 
     while [ "x$USERINST" != 'x' ] ; do
 	userinst="$(echo "$USERINST" | cut -d',' -f1)"
