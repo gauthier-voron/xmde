@@ -1,0 +1,179 @@
+#!/bin/bash
+#
+#   Listen on mpd to detect music changes or play and display a notification.
+#   The listening and fetching of song information is done with mpd.
+#   This script expect to find the song cover picture and the song file under
+#   the same directory. It peeks the first JPEG or PNG file it sees in this
+#   directory.
+#
+
+set -e
+
+if ! command -v mpc > '/dev/null' 2> '/dev/null' ; then
+    echo "cannot find mpc command"
+    exit 1
+fi >&2
+
+if ! command -v notify-send > '/dev/null' 2> '/dev/null' ; then
+    echo "cannot find notify-send command"
+    exit 1
+fi >&2
+
+if ! command -v perl > '/dev/null' 2> '/dev/null' ; then
+    echo "cannot find perl command"
+    exit 1
+fi >&2
+
+
+MPC_PID=
+
+kill_event_waiter() {
+    if [ "x${MPC_PID}" != 'x' ] ; then
+	kill ${MPC_PID}
+    fi
+}
+
+wait_event() {
+    mpc idle > '/dev/null' &
+    MPC_PID=$!
+    wait ${MPC_PID}
+    MPC_PID=
+}
+
+get_status() {
+    mpc | perl -wnle 's/^\[([^\]]+)\].*$/$1/ and print'
+}
+
+notify_played_song() {
+    local file="$(mpc current --format='[%file%]')"
+    local title="$(mpc current --format='[%title%]')"
+    local artist="$(mpc current --format='[%artist%]')"
+    local album="$(mpc current --format='[%album%]')"
+    local cover msg sep cmd link
+
+    cmd="notify-send -a 'xmde-mpd-notify'"
+    msg=
+    sep=
+
+    if [ "x$file" != 'x' ] ; then
+	cover="$(ls "${MUSIC_DIRECTORY}/${file%/*}"         \
+               | perl -wnle '/\.(jpg|jpeg|png)$/ and print' \
+               | head -n 1)"
+
+	if [ "x$cover" != 'x' ] ; then
+	    cover="${MUSIC_DIRECTORY}/${file%/*}/$cover"
+
+	    if ! echo "$cover" | perl -wnle '/,/ and exit 1' ; then
+		link="$(mktemp --dry-run --tmpdir 'icon.XXXXXX')"
+		ln -s "$cover" "$link"
+		cover="$link"
+	    fi
+
+	    cmd="$cmd -i '$cover'"
+	fi
+    fi
+
+    if [ "x$title" = 'x' ] ; then
+	cmd="$cmd '(Unknown Song)'"
+    else
+	cmd="$cmd '$title'"
+    fi
+
+    if [ "x$artist" != 'x' ] ; then
+	msg="$artist"
+	sep=" - "
+    fi
+
+    if [ "x$album" != 'x' ] ; then
+	msg="$msg$sep$album"
+    fi
+
+    if [ "x$msg" != 'x' ] ; then
+	cmd="$cmd '$msg'"
+    fi
+
+    eval $cmd
+
+    if [ "x$link" != 'x' ] ; then
+	rm "$link"
+    fi
+}
+
+
+find_config_directory_mpd() {
+    local cpath mpdconf ret
+
+    if [ "x$XDG_CONFIG_HOME" != 'x' ] ; then
+	cpath="$XDG_CONFIG_HOME"
+    else
+	cpath="$HOME/.config"
+    fi
+
+    if [ -f "$cpath/mpd/mpd.conf" ] ; then
+	mpdconf="$cpath/mpd/mpd.conf"
+    elif [ -f "$HOME/.mpdconf" ] ; then
+	mpdconf="$HOME/.mpdconf"
+    elif [ -f '/etc/mpd.conf' ] ; then
+	mpdconf='/etc/mpf.conf'
+    else
+	return 1
+    fi
+
+    ret="$(perl -wnle '
+        s/^\s*music_directory\s+["'"'"']?(.*\S["'"'"']?)\s*$/$1/ and print
+    ' "$mpdconf")"
+
+    if [ "x$ret" != 'x' ] ; then
+	echo "$ret" | perl -wple '
+            s/^["'"'"']//;
+            s/["'"'"']$//;
+            s:^~:'"$HOME"':;
+        '
+	return 0
+    else
+	return 1
+    fi
+}
+
+find_music_directory_xdg() {
+    local ret=''
+
+    if command -v 'xdg-user-dirs' > '/dev/null' 2> '/dev/null' ; then
+	ret="$(xdg-user-dirs 'MUSIC')"
+    fi
+
+    if [ "x$ret" != 'x' ] ; then
+	echo "$ret"
+	return 0
+    else
+	return 1
+    fi
+}
+
+find_music_directory() {
+    find_config_directory_mpd || find_music_directory_xdg
+}
+
+
+MUSIC_DIRECTORY="$(find_music_directory)"
+
+
+if [ "x$MUSIC_DIRECTORY" = 'x' ] ; then
+    echo "cannot find music directory"
+    exit 1
+fi >&2
+
+
+trap kill_event_waiter 'EXIT'
+
+while true ; do
+    wait_event
+
+    status="$(get_status)"
+
+    if [ "x$status" != 'xplaying' ] ; then
+	continue
+    fi
+
+    notify_played_song
+done
