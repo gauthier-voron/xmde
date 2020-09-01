@@ -145,6 +145,8 @@ install -m644 "config/suspend.service" \
 install -d -m755 "$PREFIX/etc/skel/.xmonad"
 install -m644 "config/xmonad.hs" "$PREFIX/etc/skel/.xmonad/xmonad.hs"
 
+install -d -m755 "$PREFIX/etc/skel/.config/dunst"
+install -m644 "config/dunstrc" "$PREFIX/etc/skel/.config/dunst/dunstrc"
 
 if [ "x$USERINST" != 'x/etc/skel' ] ; then
 
