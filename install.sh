@@ -102,9 +102,9 @@ fi
 #
 install -d -m755 "$PREFIX/usr/bin"
 for file in 'xmde-appmenu' 'xmde-docmenu' 'xmde-highlight' 'xmde-lock'  \
-	    'xmde-menu' 'xmde-restart' 'xmde-screen' 'xmde-screenmenu'  \
-	    'xmde-start' 'xmde-statusbar' 'xmde-touchpad' 'xmde-volume' \
-	    'xmde-wallpaper' 'xmde-xmobar'
+	    'xmde-menu' 'xmde-mpd-notify' 'xmde-restart' 'xmde-screen' \
+	    'xmde-screenmenu' 'xmde-start' 'xmde-statusbar' 'xmde-touchpad' \
+	    'xmde-volume' 'xmde-wallpaper' 'xmde-xmobar'
 do
     install -m755 "scripts/$file" "$PREFIX/usr/bin/$file"
 done
