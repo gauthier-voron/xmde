@@ -1,4 +1,9 @@
-#!/bin/sh
+#!/bin/bash
+#
+#   Change the volune with amixer.
+#   Print a notification on screen with notify-send.
+#
+
 
 set -e
 
