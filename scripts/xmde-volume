@@ -24,6 +24,30 @@ show_volume() {
     fi
 }
 
+notify_volume() {
+    local direction="$1"
+    local volume=$(get_volume)
+    local mutemx=$(is_mute)
+    local bar icon
+
+    if ! command -v notify-send ; then
+	return 0
+    fi
+
+    if [ "$mutemx" = "on" ] ; then
+	bar=$(seq -s "█" $(( ( 2 * $volume ) / 7)) | sed 's/[0-9]//g')
+	icon="/usr/share/icons/xmde/volume/$volume"
+	msg=$(printf "%3d%%   %s" $volume "$bar")
+    else
+	bar=$(seq -s "─" $(( ( 2 * $volume ) / 7)) | sed 's/[0-9]//g')
+	icon="/usr/share/icons/xmde/volume/mute.xpm"
+	msg=$(printf "%3d%%   %s" $volume "$bar")
+    fi
+
+    notify-send -a 'xmde-volume' -t 3000 -i "$icon" "Volume" "$msg"
+}
+
+
 set_up() {
     local volume=$(get_volume)
 
@@ -66,14 +90,17 @@ case "$command" in
     up)
 	set_up
 	show_volume
+	notify_volume "$command"
 	;;
     down)
 	set_down
 	show_volume
+	notify_volume "$command"
 	;;
     mute)
 	set_mute
 	show_volume
+	notify_volume "$command"
 	;;
     show)
 	show_volume
