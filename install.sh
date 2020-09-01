@@ -108,7 +108,12 @@ for file in 'xmde-appmenu' 'xmde-docmenu' 'xmde-highlight' 'xmde-lock'  \
 do
     install -m755 "scripts/$file" "$PREFIX/usr/bin/$file"
 done
+
 install -d -m755 "$PREFIX/etc/xmde/xinitrc.d"
+for file in '10-systemctl-import-display'
+do
+    install -m755 "scripts/$file" "$PREFIX/etc/xmde/xinitrc.d/$file"
+done
 
 # Configuration files.
 #
