@@ -1,6 +1,85 @@
-#!/bin/sh
+#!/bin/bash
+#
+#   Change the volune with amixer.
+#   Print a notification on screen with notify-send.
+#
+
 
 set -e
+
+
+get_volume() {
+    amixer sget Master \
+	| tail -n 1 \
+	| sed -r 's/^.*\[([[:digit:]]+)%\].*$/\1/'
+}
+
+is_mute() {
+    amixer sget Master | tail -n 1 | sed -r 's/^.*\[(on|off)\].*$/\1/'
+}
+
+
+show_volume() {
+    local mutemx=$(is_mute)
+
+    if [ "$mutemx" = "on" ] ; then
+	get_volume
+    else
+	echo 0
+    fi
+}
+
+notify_volume() {
+    local direction="$1"
+    local volume=$(get_volume)
+    local mutemx=$(is_mute)
+    local bar icon
+
+    if ! command -v notify-send ; then
+	return 0
+    fi
+
+    if [ "$mutemx" = "on" ] ; then
+	bar=$(seq -s "█" $(( ( 2 * $volume ) / 7)) | sed 's/[0-9]//g')
+	icon="/usr/share/icons/xmde/volume/$volume"
+	msg=$(printf "%3d%%   %s" $volume "$bar")
+    else
+	bar=$(seq -s "─" $(( ( 2 * $volume ) / 7)) | sed 's/[0-9]//g')
+	icon="/usr/share/icons/xmde/volume/mute.xpm"
+	msg=$(printf "%3d%%   %s" $volume "$bar")
+    fi
+
+    notify-send -a 'xmde-volume' -t 3000 -i "$icon" "Volume" "$msg"
+}
+
+
+set_up() {
+    local volume=$(get_volume)
+
+    volume=$(( $volume + 10 ))
+    if [ $volume -gt 100 ] ; then
+	volume=100
+    fi
+
+    amixer sset Master unmute   > /dev/null
+    amixer sset Master $volume% > /dev/null
+}
+
+set_down() {
+    local volume=$(get_volume)
+
+    volume=$(( $volume - 10 ))
+    if [ $volume -lt 0 ] ; then
+	volume=0
+    fi
+
+    amixer sset Master unmute   > /dev/null
+    amixer sset Master $volume% > /dev/null
+}
+
+set_mute() {
+    amixer sset Master toggle   > /dev/null
+}
 
 
 if [ $# -eq 1 ] ; then
@@ -12,42 +91,24 @@ else
 fi
 
 
-volume=`amixer sget Master | tail -n 1 | sed -r 's/^.*\[([[:digit:]]+)%\].*$/\1/'`
-mutemx=`amixer sget Master | tail -n 1 | sed -r 's/^.*\[(on|off)\].*$/\1/'`
-
-
 case "$command" in
     up)
-	volume=$(( $volume + 10 ))
-	if [ $volume -gt 100 ] ; then
-	    volume=100
-	fi
-	
-	amixer sset Master unmute   > /dev/null
-	amixer sset Master $volume% > /dev/null
-	$0
+	set_up
+	show_volume
+	notify_volume "$command"
 	;;
     down)
-	volume=$(( $volume - 10 ))
-	if [ $volume -lt 0 ] ; then
-	    volume=0
-	fi
-
-	amixer sset Master unmute   > /dev/null
-	amixer sset Master $volume% > /dev/null
-	$0
+	set_down
+	show_volume
+	notify_volume "$command"
 	;;
     mute)
-	amixer sset Master toggle   > /dev/null
-	$0
+	set_mute
+	show_volume
+	notify_volume "$command"
 	;;
     show)
-	if [ "$mutemx" = "on" ] ; then
-	    echo $volume
-	else
-	    echo 0
-	fi
-	exit 0
+	show_volume
 	;;
     *)
 	exit 1

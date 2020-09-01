@@ -11,8 +11,10 @@ The different scripts assume the following are installed:
 
   * bash
   * dmenu
+  * dunst
   * feh
   * imagemagick
+  * libnotify
   * perl
   * physlock
   * rxvt-unicode

@@ -102,13 +102,18 @@ fi
 #
 install -d -m755 "$PREFIX/usr/bin"
 for file in 'xmde-appmenu' 'xmde-docmenu' 'xmde-highlight' 'xmde-lock'  \
-	    'xmde-menu' 'xmde-restart' 'xmde-screen' 'xmde-screenmenu'  \
-	    'xmde-start' 'xmde-statusbar' 'xmde-touchpad' 'xmde-volume' \
-	    'xmde-wallpaper' 'xmde-xmobar'
+	    'xmde-menu' 'xmde-mpd-notify' 'xmde-restart' 'xmde-screen' \
+	    'xmde-screenmenu' 'xmde-start' 'xmde-statusbar' 'xmde-touchpad' \
+	    'xmde-volume' 'xmde-wallpaper' 'xmde-xmobar'
 do
     install -m755 "scripts/$file" "$PREFIX/usr/bin/$file"
 done
+
 install -d -m755 "$PREFIX/etc/xmde/xinitrc.d"
+for file in '10-systemctl-import-display'
+do
+    install -m755 "scripts/$file" "$PREFIX/etc/xmde/xinitrc.d/$file"
+done
 
 # Configuration files.
 #
@@ -137,15 +142,13 @@ install -m644 "config/suspend.service" \
 # Install user specific files, depending on USERINST value.
 # Be sure to give ownership of installed files to appropriate user.
 #
-if [ "x$USERINST" = 'x/etc/skel' ] ; then
+install -d -m755 "$PREFIX/etc/skel/.xmonad"
+install -m644 "config/xmonad.hs" "$PREFIX/etc/skel/.xmonad/xmonad.hs"
 
-    install -d -m755 "$PREFIX/etc/skel/.xmonad"
-    install -m644 "config/xmonad.hs" "$PREFIX/etc/skel/.xmonad/xmonad.hs"
+install -d -m755 "$PREFIX/etc/skel/.config/dunst"
+install -m644 "config/dunstrc" "$PREFIX/etc/skel/.config/dunst/dunstrc"
 
-else
-
-    install -d -m755 "$PREFIX/etc/skel/.xmonad"
-    install -m644 "config/xmonad.hs" "$PREFIX/etc/skel/.xmonad/xmonad.hs"
+if [ "x$USERINST" != 'x/etc/skel' ] ; then
 
     while [ "x$USERINST" != 'x' ] ; do
 	userinst="$(echo "$USERINST" | cut -d',' -f1)"
