@@ -16,7 +16,10 @@ DEPENDENCIES=(
     'ttf-liberation'
     'xcompmgr' 'xmobar' 'xmonad' 'xmonad-contrib' 'xorg-server' 'xorg-xinit'
     'xorg-xinput' 'xorg-xprop' 'xorg-xrandr' 'xorg-xset'
-    )
+)
+
+# Note: transset-df is not in the official repository anymore but still the
+#       only option to have per application transparency
 
 
 echo "Create root parition on '$DISK'"
