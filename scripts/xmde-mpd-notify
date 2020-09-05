@@ -25,21 +25,6 @@ if ! command -v perl > '/dev/null' 2> '/dev/null' ; then
 fi >&2
 
 
-MPC_PID=
-
-kill_event_waiter() {
-    if [ "x${MPC_PID}" != 'x' ] ; then
-	kill ${MPC_PID}
-    fi
-}
-
-wait_event() {
-    mpc idle > '/dev/null' &
-    MPC_PID=$!
-    wait ${MPC_PID}
-    MPC_PID=
-}
-
 get_status() {
     mpc | perl -wnle 's/^\[([^\]]+)\].*$/$1/ and print'
 }
@@ -164,11 +149,9 @@ if [ "x$MUSIC_DIRECTORY" = 'x' ] ; then
 fi >&2
 
 
-trap kill_event_waiter 'EXIT'
+trap 'kill $(jobs -p)' 'EXIT'
 
-while true ; do
-    wait_event
-
+mpc idleloop | while read event ; do
     status="$(get_status)"
 
     if [ "x$status" != 'xplaying' ] ; then
