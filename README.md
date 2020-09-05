@@ -18,6 +18,7 @@ The different scripts assume the following are installed:
   * perl
   * physlock
   * rxvt-unicode
+  * transset-df (AUR)
   * ttf-liberation
   * xcompmgr
   * xmobar
