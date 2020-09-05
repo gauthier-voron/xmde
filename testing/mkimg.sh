@@ -4,7 +4,7 @@ set -e
 
 VDISK='testing/daemon.img'
 ISOSOURCE='https://www.archlinux.org/download'
-ISOMIRROR='https://mirror.aarnet.edu.au/pub/archlinux/iso'
+ISOMIRROR='http://mirror.rackspace.com/archlinux/iso'
 INSTALL='testing/install.sh'
 SIZE='4G'
 
