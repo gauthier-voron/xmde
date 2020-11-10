@@ -47,6 +47,20 @@ is_already_locked() {
     fi
 }
 
+alsa_dump() {
+    local state
+
+    if ! command -v alsactl > '/dev/null' ; then
+	return 0
+    fi
+
+    state="$(mktemp --tmpdir --suffix='.state' 'alsa.XXXXXXXXXX')"
+
+    alsactl -f "${state}" store
+
+    echo "${state}"
+}
+
 xset_dump() {
     xset q | perl -wnle '
         if (/^.*prefer blanking:\s*(yes|no).*allow exposures:\s*(yes|no).*$/) {
@@ -67,6 +81,16 @@ xset_dump() {
             printf " %s", $dpms;
         }
     '
+}
+
+alsa_load() {
+    local state="$1" ; shift
+
+    if ! command -v alsactl > '/dev/null' ; then
+	return 0
+    fi
+
+    alsactl -f "${state}" restore && rm "${state}"
 }
 
 xset_load() {
@@ -239,6 +263,10 @@ if [ -e "/var/run/user/$UID/xmde/vconsole" ] ; then
 			 "/var/run/user/$UID/xmde/vconsole")
 fi
 
+# Save the audio parameters.
+#
+alsaconf="$(alsa_dump)"
+
 # Save the screen energy parameters and set them so it turns off after 30 sec
 # of inactivity.
 #
@@ -266,6 +294,10 @@ if [ $daemon -eq 0 ] ; then
     #
     xset_load "$xsetparms"
 
+    # Restore the audio parameters.
+    #
+    alsa_load "${alsaconf}"
+
 else
 
     # Lock the screen.
@@ -281,7 +313,7 @@ else
     # Only do that in background so this script can be used by system suspend.
     #
     (
-	trap "xset_load '$xsetparms'" 'EXIT'
+	trap "xset_load '$xsetparms' ; alsa_load '${alsaconf}'" 'EXIT'
 
 	while ps $pid > /dev/null 2> /dev/null ; do
 	    sleep 1
