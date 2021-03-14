@@ -109,7 +109,8 @@ xmdeKeyControls conf@(XConfig { XMonad.modMask= modMask }) = M.fromList $
 
   -- Main controls over machine and GUI
   , (( controlMask .|. mod4Mask, xK_x ), spawn "xmde-restart" )
-  , (( mod4Mask, xK_l ), spawn "xmde-lock" )
+  , (( mod4Mask,                 xK_l ), spawn "xmde-lock" )
+  , (( controlMask .|. mod4Mask, xK_l ), spawn "systemctl hibernate" )
   ]
 
 xmdeMouseControls (XConfig {XMonad.modMask = modMask}) = M.fromList $
