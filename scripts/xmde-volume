@@ -49,7 +49,10 @@ notify_volume() {
 	msg=$(printf "%3d%%   %s" $volume "$bar")
     fi
 
-    notify-send -a 'xmde-volume' -t 3000 -i "$icon" "Volume" "$msg"
+    notify-send --app-name='xmde-volume' \
+		--hint='string:synchronous:volume' \
+		--expire-time=3000 \
+		--icon="$icon" "Volume" "$msg"
 }
 
 
