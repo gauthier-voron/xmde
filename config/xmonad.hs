@@ -9,6 +9,7 @@ import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.EwmhDesktops
 import XMonad.Hooks.ManageDocks
 import XMonad.Hooks.ManageHelpers
+import XMonad.Hooks.StatusBar.PP
 import XMonad.Layout.FixedColumn
 import XMonad.Layout.NoBorders
 import XMonad.Layout.Spacing
@@ -30,7 +31,7 @@ main = do
   spawn "xmde-mpd-notify"
   spawn ( "xmde-wallpaper " ++ wallpaperDir )
   xmobar <- spawnPipe ( "xmobar " ++ xmobarConfig )
-  xmonad $ ewmh azertyConfig
+  xmonad $ docks $ ewmhFullscreen $ ewmh azertyConfig
     { keys               = xmdeKeyControls
     , mouseBindings      = xmdeMouseControls
     , normalBorderColor  = colorNormalBorder
@@ -53,8 +54,6 @@ xmdeManage = composeAll
   ]
 
 xmdeEvent = handleEventHook azertyConfig
-            <+> fullscreenEventHook
-            <+> docksEventHook
 
 
 -- ----------------------------------------------------------------------------
@@ -145,7 +144,7 @@ prevMSWS      = moveTo  Prev (WSIs onMainScreen)
 shiftNextMSWS = shiftTo Next (WSIs onMainScreen)
 shiftPrevMSWS = shiftTo Prev (WSIs onMainScreen)
 
-xmdeXmobarPP p = defaultPP
+xmdeXmobarPP p = def
   { ppCurrent         = \_ -> "<icon=workspace/ws-focused.xpm/>"
   , ppVisible         = \_ -> "<icon=workspace/ws-screen.xpm/>"
   , ppHidden          = \_ -> "<icon=workspace/ws-active.xpm/>"
