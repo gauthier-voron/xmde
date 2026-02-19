@@ -43,13 +43,13 @@ command=$(
 #
 for cmd in $APPMENU_IN_TERMINAL ; do
     if [ "x$command" = "x$cmd" ] ; then
-	exec "${APPMENU_TERMINAL:-urxvt}" -e "$command"
+	exec "${APPMENU_TERMINAL:-alacritty}" -e "$command"
     fi
 done
 
 for lib in $APPMENU_LIB_IN_TERMINAL ; do
     if ldd `which "$command"` | grep -q "$lib" ; then
-	exec "${APPMENU_TERMINAL:-urxvt}" -e "$command"
+	exec "${APPMENU_TERMINAL:-alacritty}" -e "$command"
     fi
 done
 

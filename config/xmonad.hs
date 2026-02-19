@@ -46,9 +46,38 @@ main = do
   where scratch = scratchpadWorkspaceTag
 
 
+
+-- ----------------------------------------------------------------------------
+-- Windows Layout
+
+data FixedWidth a = FixedWidth Int deriving (Read, Show)
+
+instance LayoutClass FixedWidth Window where
+  doLayout (FixedWidth mw) rect stack = do
+    case W.integrate stack of
+      [] -> return ([], Nothing)
+      [m] -> return ([(m, rect)], Nothing)
+      (m:ss) -> let
+          (Rectangle rx ry rw rh) = rect
+          x = fromIntegral rx
+          y = fromIntegral ry
+          w = fromIntegral rw
+          h = fromIntegral rh
+          tw = w - mw
+          tx = x + mw
+          th = h `div` length ss
+          mr = mkrect rx ry mw rh
+          srs = [ mkrect tx (y + i * th) tw th
+                | i <- [ 0 .. length ss - 1 ]
+                ]
+        in return (zip (m:ss) (mr:srs), Nothing)
+    where mkrect x y w h = Rectangle (fromIntegral x) (fromIntegral y)
+                                     (fromIntegral w) (fromIntegral h)
+
+
 xmdeLayout = avoidStruts
-  ( smartBorders ( FixedColumn 1 20 80 10 ) |||
-    noBorders Full
+  (    smartBorders $ FixedWidth 650
+  |||  noBorders Full
   )
 
 xmdeManage = composeAll
@@ -77,7 +106,7 @@ xmdeKeyControls conf@(XConfig { XMonad.modMask= modMask }) = M.fromList $
   , (( mod4Mask, xK_s      ), spawn ( "xmde-screenmenu "                ) )
   , (( mod4Mask, xK_Return ), spawn "xmde-touchpad toggle"                )
   , (( mod4Mask, xK_q      ), kill                                        )
-  , (( mod4Mask, xK_t      ), spawn "urxvt"                               )
+  , (( mod4Mask, xK_t      ), spawn "alacritty"                           )
 
   , (( mod4Mask, xK_k      ), namedScratchpadAction xmdeScratchpads "keepass" )
 

@@ -9,6 +9,7 @@ Dependencies
 
 The different scripts assume the following are installed:
 
+  * alacritty
   * bash
   * dmenu
   * dunst
@@ -17,7 +18,6 @@ The different scripts assume the following are installed:
   * libnotify
   * perl
   * physlock
-  * rxvt-unicode
   * transset-df (AUR)
   * ttf-liberation
   * xcompmgr
