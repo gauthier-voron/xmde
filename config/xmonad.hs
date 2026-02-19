@@ -13,6 +13,7 @@ import XMonad.Hooks.StatusBar.PP
 import XMonad.Layout.FixedColumn
 import XMonad.Layout.NoBorders
 import XMonad.Layout.Spacing
+import XMonad.Util.NamedScratchpad
 import XMonad.Util.Run
 
 import qualified XMonad.Actions.FlexibleResize as Flex
@@ -37,10 +38,12 @@ main = do
     , normalBorderColor  = colorNormalBorder
     , focusedBorderColor = colorFocusedBorder
     , layoutHook         = xmdeLayout
-    , logHook            = dynamicLogWithPP $ xmdeXmobarPP xmobar
+    , logHook            = dynamicLogWithPP . filterOutWsPP [scratch]
+                           $ xmdeXmobarPP xmobar
     , manageHook         = xmdeManage
     , handleEventHook    = xmdeEvent
     }
+  where scratch = scratchpadWorkspaceTag
 
 
 xmdeLayout = avoidStruts
@@ -75,6 +78,8 @@ xmdeKeyControls conf@(XConfig { XMonad.modMask= modMask }) = M.fromList $
   , (( mod4Mask, xK_Return ), spawn "xmde-touchpad toggle"                )
   , (( mod4Mask, xK_q      ), kill                                        )
   , (( mod4Mask, xK_t      ), spawn "urxvt"                               )
+
+  , (( mod4Mask, xK_k      ), namedScratchpadAction xmdeScratchpads "keepass" )
 
   , (( 0, xF86XK_AudioMute),        spawn "xmde-volume mute" )
   , (( 0, xF86XK_AudioLowerVolume), spawn "xmde-volume down" )
@@ -118,7 +123,24 @@ xmdeMouseControls (XConfig {XMonad.modMask = modMask}) = M.fromList $
   -- Resize windows with right click
   , ((mod4Mask, button3), (\w -> focus w >> Flex.mouseResizeWindow w))
   ]
-  
+
+
+
+-- ----------------------------------------------------------------------------
+-- Named Scratchpads
+
+xmdeScratchpads   = [ NS "keepass" runKeepass findKeepass layoutKeepass
+                    ]
+  where
+    runKeepass    = "keepassxc"
+    findKeepass   = (className =? "KeePassXC")
+    layoutKeepass = customFloating $ W.RationalRect l t w h
+      where
+        w = 0.9
+        h = 0.9
+        l = 0.95 - w
+        t = 0.95 - h
+
 
 
 -- ----------------------------------------------------------------------------
@@ -139,10 +161,13 @@ onMainScreen = do ws <- gets windowset
                   return (inner unvws)
   where inner mid ws = (W.tag ws) `elem` mid
 
-nextMSWS      = moveTo  Next (WSIs onMainScreen)
-prevMSWS      = moveTo  Prev (WSIs onMainScreen)
-shiftNextMSWS = shiftTo Next (WSIs onMainScreen)
-shiftPrevMSWS = shiftTo Prev (WSIs onMainScreen)
+nextMSWS      = moveTo  Next allMSWS
+prevMSWS      = moveTo  Prev allMSWS
+shiftNextMSWS = shiftTo Next allMSWS
+shiftPrevMSWS = shiftTo Prev allMSWS
+
+allMSWS :: WSType
+allMSWS = (WSIs onMainScreen) :&: ignoringWSs [scratchpadWorkspaceTag]
 
 xmdeXmobarPP p = def
   { ppCurrent         = \_ -> "<icon=workspace/ws-focused.xpm/>"
